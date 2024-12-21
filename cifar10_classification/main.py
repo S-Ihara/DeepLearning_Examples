@@ -12,8 +12,8 @@ from torchvision.datasets import CIFAR10
 
 import configs 
 from NN_Modules.modules import SimpleCNN
-from algorithms.train import train_loop
-from algorithms.eval import test_loop
+from core.train import train_loop
+from core.eval import test_loop
 
 try:
     from loguru import logger
