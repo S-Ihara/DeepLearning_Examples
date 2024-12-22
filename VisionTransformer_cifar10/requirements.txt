@@ -1,2 +1,5 @@
 loguru
 line_profiler
+matplotlib
+seaborn
+clearml

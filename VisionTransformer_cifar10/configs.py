@@ -9,6 +9,9 @@ class DefaultConfig:
     log_dir: str = "./logs/logs"
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
+    use_clearml: bool = True
+    line_profile: bool = False
+
     patch_size: int = 4
     dim: int = 128
     num_heads: int = 8

@@ -4,16 +4,17 @@ from datetime import datetime
 from pprint import pformat
 
 from tqdm import tqdm
+import numpy as np
 import torch
 from torchvision.transforms import v2 as transforms
 from torch.utils.data import DataLoader
-from torchvision.models import resnet18
 from torchvision.datasets import CIFAR10
 
 import configs 
-from NN_Modules.vision_transformer import VisionTransformer
+from nn_modules.vision_transformer import VisionTransformer
 from core.train import train_loop
 from core.eval import test_loop
+from utilities.plot_graph import plot_loss, plot_accuracy
 
 try:
     from loguru import logger
@@ -21,6 +22,26 @@ except ImportError:
     import logging as logger
 
 def main(config):
+    # clearml
+    if getattr(config, "use_clearml", False):
+        logger.info("use clearml")
+        from clearml import Task
+        now = datetime.now().strftime('%Y%m%d-%H%M%S')
+        project_name = "vit_cifar10"
+        task_name = "test"+"_"+now
+        tag = "cifar10"
+        comment = """
+            Vision Transformer for CIFAR10 classification
+        """
+        task = Task.init(project_name=project_name, task_name=task_name)
+        task.add_tags(tag)
+        task.set_comment(comment)
+        clearml_logger = task.get_logger()
+        logger.info(f"clearml task: {task.id}")
+
+        # log config
+        task.connect(config, name="config")
+
     logger.info("start CIFAR10 classification training")
     # dataset 
     compose = transforms.Compose([
@@ -71,7 +92,22 @@ def main(config):
         logger.info(f"epoch: {epoch}, valid_loss: {valid_info['test_loss']}, valid_acc: {valid_info['test_acc']}")
         logger.info("---"*10)
 
+        if getattr(config, "use_clearml", False):
+            clearml_logger.report_scalar(title="loss",series="train_loss",value=train_info["train_loss"],iteration=epoch)
+            clearml_logger.report_scalar(title="acc",series="train_acc",value=train_info["train_acc"],iteration=epoch)
+            clearml_logger.report_scalar(title="loss",series="valid_loss",value=valid_info["test_loss"],iteration=epoch)
+            clearml_logger.report_scalar(title="acc",series="valid_acc",value=valid_info["test_acc"],iteration=epoch)
+            clearml_logger.report_scalar(title="lr",series="lr",value=optimizer.param_groups[0]["lr"],iteration=epoch)
+
     logger.info("finish training")
+
+    # plot graph
+    train_losses = np.stack(train_losses)
+    valid_losses = np.stack(valid_losses)
+    train_accuracies = np.stack(train_accuracies)
+    valid_accuracies = np.stack(valid_accuracies)
+    plot_loss(config.log_dir, train_losses, valid_losses)
+    plot_accuracy(config.log_dir, train_accuracies, valid_accuracies)
 
     # save model
     torch.save(model.state_dict(), f"{config.log_dir}/model.pth")
@@ -95,11 +131,14 @@ if __name__ == "__main__":
     # main(config)
 
     # # line profiler
-    import line_profiler
-    profile = line_profiler.LineProfiler()
-    profile.add_function(main)
-    profile.add_function(train_loop)
-    profile.runcall(main, config)
-    profile.print_stats(output_unit=1e-3)
-    profile.dump_stats(f"{config.log_dir}/line_profiler.log")
+    if getattr(config, "line_profile", False):
+        import line_profiler
+        profile = line_profiler.LineProfiler()
+        profile.add_function(main)
+        profile.add_function(train_loop)
+        profile.runcall(main, config)
+        profile.print_stats(output_unit=1e-3)
+        profile.dump_stats(f"{config.log_dir}/line_profiler.log")
+    else:
+        main(config)
 
